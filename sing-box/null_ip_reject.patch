@@ -1,0 +1,78 @@
+diff --git a/constant/rule.go b/constant/rule.go
+index 8696372b6..4e17f4298 100644
+--- a/constant/rule.go
++++ b/constant/rule.go
+@@ -46,6 +46,7 @@ const (
+ 	RuleActionRejectMethodDefault = "default"
+ 	RuleActionRejectMethodDrop    = "drop"
+ 	RuleActionRejectMethodReply   = "reply"
++	RuleActionRejectMethodNullIP  = "null-ip"
+ )
+ 
+ type DomainMatchStrategy = uint8
+diff --git a/dns/router.go b/dns/router.go
+index f0eda36bb..e291fb064 100644
+--- a/dns/router.go
++++ b/dns/router.go
+@@ -516,6 +516,20 @@ func (r *Router) exchangeWithRules(ctx context.Context, rules []adapter.DNSRule,
+ 					rejectAction: action,
+ 					err:          tun.ErrDrop,
+ 				}
++			case C.RuleActionRejectMethodNullIP:
++				var response *mDNS.Msg
++				switch message.Question[0].Qtype {
++				case mDNS.TypeA:
++					response = FixedResponse(message.Id, message.Question[0], []netip.Addr{netip.IPv4Unspecified()}, 0)
++				case mDNS.TypeAAAA:
++					response = FixedResponse(message.Id, message.Question[0], []netip.Addr{netip.IPv6Unspecified()}, 0)
++				default:
++					response = FixedResponse(message.Id, message.Question[0], nil, 0)
++				}
++				return exchangeWithRulesResult{
++					response:     response,
++					rejectAction: action,
++				}
+ 			}
+ 		case *R.RuleActionPredefined:
+ 			resp := action.Response(message)
+@@ -718,6 +732,15 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
+ 						}, nil
+ 					case C.RuleActionRejectMethodDrop:
+ 						return nil, tun.ErrDrop
++					case C.RuleActionRejectMethodNullIP:
++						switch message.Question[0].Qtype {
++						case mDNS.TypeA:
++							return FixedResponse(message.Id, message.Question[0], []netip.Addr{netip.IPv4Unspecified()}, 0), nil
++						case mDNS.TypeAAAA:
++							return FixedResponse(message.Id, message.Question[0], []netip.Addr{netip.IPv6Unspecified()}, 0), nil
++						default:
++							return FixedResponse(message.Id, message.Question[0], nil, 0), nil
++						}
+ 					}
+ 				case *R.RuleActionPredefined:
+ 					err = nil
+diff --git a/option/rule_action.go b/option/rule_action.go
+index 1d12d34ca..d42e20670 100644
+--- a/option/rule_action.go
++++ b/option/rule_action.go
+@@ -373,6 +373,7 @@ func (r *DNSRejectActionOptions) UnmarshalJSON(bytes []byte) error {
+ 	case "", C.RuleActionRejectMethodDefault:
+ 		r.Method = C.RuleActionRejectMethodDefault
+ 	case C.RuleActionRejectMethodDrop:
++	case C.RuleActionRejectMethodNullIP:
+ 	default:
+ 		return E.New("unknown reject method: " + r.Method)
+ 	}
+diff --git a/route/rule/rule_action.go b/route/rule/rule_action.go
+index bfddcb9be..7c64c4319 100644
+--- a/route/rule/rule_action.go
++++ b/route/rule/rule_action.go
+@@ -453,7 +453,7 @@ func (r *RuleActionReject) Error(ctx context.Context) error {
+ 		returnErr = &RejectedError{tun.ErrReset}
+ 	case C.RuleActionRejectMethodDrop:
+ 		return &RejectedError{tun.ErrDrop}
+-	case C.RuleActionRejectMethodReply:
++	case C.RuleActionRejectMethodReply, C.RuleActionRejectMethodNullIP:
+ 		return nil
+ 	default:
+ 		panic(F.ToString("unknown reject method: ", r.Method))
