@@ -1,0 +1,26 @@
+diff --git a/log/log.go b/log/log.go
+index 3a1c6537..16e45ea7 100644
+--- a/log/log.go
++++ b/log/log.go
+@@ -48,7 +48,7 @@ func New(options Options) (Factory, error) {
+ 		DisableColors:    logOptions.DisableColor || logFilePath != "",
+ 		DisableTimestamp: !logOptions.Timestamp && logFilePath != "",
+ 		FullTimestamp:    logOptions.Timestamp,
+-		TimestampFormat:  "-0700 2006-01-02 15:04:05",
++		TimestampFormat:  "[2006-01-02 15:04:05 UTC-07]",
+ 	}
+ 	factory := NewDefaultFactory(
+ 		options.Context,
+diff --git a/option/options.go b/option/options.go
+index 34515d3e..eff6e00f 100644
+--- a/option/options.go
++++ b/option/options.go
+@@ -44,7 +44,7 @@ type LogOptions struct {
+ 	Level        string `json:"level,omitempty"`
+ 	Output       string `json:"output,omitempty"`
+ 	Timestamp    bool   `json:"timestamp,omitempty"`
+-	DisableColor bool   `json:"-"`
++	DisableColor bool   `json:"disable_color,omitempty"`
+ }
+ 
+ type StubOptions struct{}
